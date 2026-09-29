@@ -1,23 +1,20 @@
 /*
-  Intruder Alarm System — Dual Zone (mmWave Radar 1 & 2) + LCD Display
-  ESP32 with WiFi + Firebase Realtime Database
+  Intruder Alarm System - Dual Zone + LCD + Firebase + Phone Notifications
   ------------------------------------------------------------------------
-  16x2 I2C LCD shows system status (Armed/Disarmed, last zone triggered).
+  NEW in this version:
+  - Real time from the internet (NTP), so the dashboard can say "5 minutes ago"
+  - Push notification to your phone via ntfy.sh when an intruder is detected
 
-  ADDITIONAL LIBRARY REQUIRED:
-  - "LiquidCrystal I2C" by Frank de Brabander (Arduino Library Manager)
+  LIBRARIES: FirebaseClient (mobizt), LiquidCrystal I2C (Frank de Brabander)
 
-  LCD WIRING (I2C, only 4 wires):
-  - VCC -> 5V (or 3.3V depending on your module, check the backpack)
-  - GND -> GND
-  - SDA -> GPIO21
-  - SCL -> GPIO22
+  PHONE NOTIFICATION SETUP:
+  1. Install the free "ntfy" app on your phone (Android/iPhone)
+  2. Tap "+" and subscribe to the SAME topic name as NTFY_TOPIC below
+  3. Treat the topic name like a password: anyone who knows it can read
+     your alerts. Change it to something only you know (then subscribe to
+     the new name).
 
-  If your LCD doesn't show anything once powered, most I2C backpacks have a
-  small potentiometer on the back — turn it to adjust contrast.
-
-  NOTE: Default I2C address is usually 0x27, but some modules use 0x3F.
-  If the screen stays blank, try changing LCD_ADDR below.
+  FILL IN: WIFI_SSID and WIFI_PASSWORD
 */
 
 #define ENABLE_USER_AUTH
@@ -25,29 +22,40 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <time.h>
 #include <FirebaseClient.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+
+// Tell FirebaseClient which network client to use for TLS
+#define SSL_CLIENT WiFiClientSecure
 
 // ---------------- Configuration ----------------
 const char* WIFI_SSID     = "REEDOX";
 const char* WIFI_PASSWORD = "Reedox2$@2";
 
-#define API_KEY      "AIzaSyAZOayqV4NluWYSeXV7QKEAJfZUz5ZbaDU",
+#define API_KEY      "AIzaSyAZOayqV4NLuWYSeXV7QKEAJfZUz5ZbaDU"
 #define DATABASE_URL "https://smart-intruder-alarm-default-rtdb.firebaseio.com"
 #define USER_EMAIL   "ismailbamidele2002@gmail.com"
 #define USER_PASS    "Reedox2029"
 
-const int PIN_DECODER_VT = 14;
-const int PIN_DECODER_D0 = 33;
-const int PIN_DECODER_D1 = 32;
-const int PIN_BUZZER     = 23;
+// ntfy topic (subscribe to this exact name in the ntfy app)
+const char* NTFY_TOPIC = "smart-intruder-alarm-x7k2q9";
 
-// LCD I2C pins
+// Names shown on dashboard, LCD and notification
+const char* ZONE_A_NAME = "Zone A";
+const char* ZONE_B_NAME = "Zone B";
+
+// Pins (placeholders, change to match your wiring)
+const int PIN_DECODER_VT = 14;
+const int PIN_DECODER_D0 = 25;
+const int PIN_DECODER_D1 = 27;
+const int PIN_BUZZER     = 26;
 #define PIN_LCD_SDA 21
 #define PIN_LCD_SCL 22
 
-#define LCD_ADDR 0x27   // change to 0x3F if screen stays blank
+#define LCD_ADDR 0x27
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
@@ -60,18 +68,18 @@ const String PATH_STATUS    = "alarm/status";
 const String PATH_ZONE      = "alarm/lastZone";
 const String PATH_TRIGGERED = "alarm/lastTriggered";
 
-bool systemArmed        = true;
-bool buzzerActive       = false;
+bool systemArmed = true;
+bool buzzerActive = false;
+bool everTriggered = false;
 String lastZoneTriggered = "None";
-unsigned long lastAlertTime    = 0;
-unsigned long buzzerStartTime  = 0;
-unsigned long lastLcdUpdate    = 0;
+unsigned long lastAlertTime = 0;
+unsigned long buzzerStartTime = 0;
+unsigned long lastLcdUpdate = 0;
 
 LiquidCrystal_I2C lcd(LCD_ADDR, LCD_COLS, LCD_ROWS);
 
 UserAuth user_auth(API_KEY, USER_EMAIL, USER_PASS);
 SSL_CLIENT ssl_client, stream_ssl_client;
-
 FirebaseApp app;
 using AsyncClient = AsyncClientClass;
 AsyncClient aClient(ssl_client), streamClient(stream_ssl_client);
@@ -80,22 +88,17 @@ RealtimeDatabase Database;
 void updateLCD() {
   lcd.clear();
   lcd.setCursor(0, 0);
-  if (buzzerActive) {
-    lcd.print("!! INTRUDER !!");
-  } else {
-    lcd.print(systemArmed ? "Status: ARMED" : "Status: DISARM");
-  }
+  if (buzzerActive) lcd.print("!! INTRUDER !!");
+  else lcd.print(systemArmed ? "Status: ARMED" : "Status: DISARM");
   lcd.setCursor(0, 1);
   lcd.print("Zone: " + lastZoneTriggered);
 }
 
 void processData(AsyncResult &aResult) {
   if (!aResult.isResult()) return;
-
   if (aResult.isError()) {
     Serial.printf("Firebase error: %s\n", aResult.error().message().c_str());
   }
-
   if (aResult.available()) {
     RealtimeDatabaseResult &RTDB = aResult.to<RealtimeDatabaseResult>();
     if (RTDB.type() == realtime_database_data_type_boolean) {
@@ -107,54 +110,76 @@ void processData(AsyncResult &aResult) {
 }
 
 void initWiFi() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting WiFi");
-
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print("Connecting WiFi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println(WiFi.localIP());
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print("WiFi Connected");
+  delay(1000);
+}
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("WiFi Connected");
-  delay(1500);
+// Get real clock time from the internet (needed for "x minutes ago")
+void initTime() {
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print("Syncing time...");
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  unsigned long start = millis();
+  while (time(nullptr) < 1700000000 && millis() - start < 10000) delay(250);
+  Serial.println(time(nullptr) > 1700000000 ? "Time synced" : "Time sync failed");
+}
+
+// Push notification to phone (ntfy.sh)
+void sendPushNotification(const String &zoneName) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  if (http.begin(client, String("https://ntfy.sh/") + NTFY_TOPIC)) {
+    http.addHeader("Title", "Intruder detected!");
+    http.addHeader("Priority", "urgent");
+    http.addHeader("Tags", "rotating_light");
+    int code = http.POST("Movement detected at " + zoneName);
+    Serial.printf("Push notification sent, HTTP %d\n", code);
+    http.end();
+  }
 }
 
 void triggerAlarm(const String &zoneName) {
   unsigned long now = millis();
-  if (now - lastAlertTime < ALERT_COOLDOWN_MS) return;
+  if (everTriggered && now - lastAlertTime < ALERT_COOLDOWN_MS) return;
 
-  lastAlertTime      = now;
-  buzzerActive       = true;
-  buzzerStartTime    = now;
-  lastZoneTriggered  = zoneName;
+  everTriggered = true;
+  lastAlertTime = now;
+  buzzerActive = true;
+  buzzerStartTime = now;
+  lastZoneTriggered = zoneName;
   digitalWrite(PIN_BUZZER, HIGH);
   updateLCD();
 
+  time_t t = time(nullptr);
+  int epoch = (t > 1700000000) ? (int)t : 0;   // 0 = clock not available
+
   Database.set<String>(aClient, PATH_STATUS, "Intruder detected!", processData, "setStatusTask");
   Database.set<String>(aClient, PATH_ZONE, zoneName, processData, "setZoneTask");
-  Database.set<int>(aClient, PATH_TRIGGERED, (int)(millis() / 1000), processData, "setTimeTask");
+  Database.set<int>(aClient, PATH_TRIGGERED, epoch, processData, "setTimeTask");
+
+  sendPushNotification(zoneName);
 }
 
 void setup() {
   Serial.begin(115200);
-
   pinMode(PIN_DECODER_VT, INPUT);
   pinMode(PIN_DECODER_D0, INPUT);
   pinMode(PIN_DECODER_D1, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER, LOW);
 
-  Wire.begin(PIN_LCD_SDA, PIN_LCD_SCL); // SDA=21, SCL=22
+  Wire.begin(PIN_LCD_SDA, PIN_LCD_SCL);
   lcd.init();
   lcd.backlight();
 
   initWiFi();
+  initTime();
 
   ssl_client.setInsecure();
   stream_ssl_client.setInsecure();
@@ -177,11 +202,8 @@ void loop() {
   app.loop();
 
   if (app.ready() && systemArmed && digitalRead(PIN_DECODER_VT) == HIGH) {
-    if (digitalRead(PIN_DECODER_D0) == HIGH) {
-      triggerAlarm("Zone A");
-    } else if (digitalRead(PIN_DECODER_D1) == HIGH) {
-      triggerAlarm("Zone B");
-    }
+    if (digitalRead(PIN_DECODER_D0) == HIGH) triggerAlarm(ZONE_A_NAME);
+    else if (digitalRead(PIN_DECODER_D1) == HIGH) triggerAlarm(ZONE_B_NAME);
   }
 
   if (buzzerActive && millis() - buzzerStartTime >= BUZZER_DURATION_MS) {

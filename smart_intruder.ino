@@ -41,7 +41,7 @@ const char* WIFI_PASSWORD = "your wifi pasword";
 #define USER_PASS    "firebase user password"
 
 // ntfy topic (subscribe to this exact name in the ntfy app)
-const char* NTFY_TOPIC = "smart-intruder-alarm-x7k2q9";
+const char* NTFY_TOPIC = "smart-intruder-alarm- topic from the app ";
 
 // Names shown on dashboard, LCD and notification
 const char* ZONE_A_NAME = "Zone A";

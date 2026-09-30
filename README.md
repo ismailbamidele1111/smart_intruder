@@ -1,4 +1,4 @@
-Smart Intruder Alarm
+Smart Intruder Security System
 
 Overview
 
@@ -148,4 +148,4 @@ Sensitive information such as:
 5. Private configuration files
 
 Author
-Ridwan Bamidele Ismail and Shehu Uthman
+Ridwan Ismail and Shehu Uthman

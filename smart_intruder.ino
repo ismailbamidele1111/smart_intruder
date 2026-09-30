@@ -28,17 +28,17 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// Tell FirebaseClient which network client to use for TLS
+// Tell FirebaseClient which network client to use for 
 #define SSL_CLIENT WiFiClientSecure
 
 // ---------------- Configuration ----------------
-const char* WIFI_SSID     = "REEDOX";
-const char* WIFI_PASSWORD = "Reedox2$@2";
+const char* WIFI_SSID     = "your wifi name";
+const char* WIFI_PASSWORD = "your wifi pasword";
 
-#define API_KEY      "AIzaSyAZOayqV4NLuWYSeXV7QKEAJfZUz5ZbaDU"
+#define API_KEY      "your firebse API key"
 #define DATABASE_URL "https://smart-intruder-alarm-default-rtdb.firebaseio.com"
-#define USER_EMAIL   "ismailbamidele2002@gmail.com"
-#define USER_PASS    "Reedox2029"
+#define USER_EMAIL   "firebase email"
+#define USER_PASS    "firebase user password"
 
 // ntfy topic (subscribe to this exact name in the ntfy app)
 const char* NTFY_TOPIC = "smart-intruder-alarm-x7k2q9";
@@ -49,9 +49,9 @@ const char* ZONE_B_NAME = "Zone B";
 
 // Pins (placeholders, change to match your wiring)
 const int PIN_DECODER_VT = 14;
-const int PIN_DECODER_D0 = 25;
-const int PIN_DECODER_D1 = 27;
-const int PIN_BUZZER     = 26;
+const int PIN_DECODER_D0 = 32;
+const int PIN_DECODER_D1 = 33;
+const int PIN_BUZZER     = 23;
 #define PIN_LCD_SDA 21
 #define PIN_LCD_SCL 22
 
@@ -59,7 +59,7 @@ const int PIN_BUZZER     = 26;
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
-const unsigned long ALERT_COOLDOWN_MS  = 60000;
+const unsigned long ALERT_COOLDOWN_MS  = 3000;
 const unsigned long BUZZER_DURATION_MS = 15000;
 const unsigned long LCD_REFRESH_MS     = 1000;
 

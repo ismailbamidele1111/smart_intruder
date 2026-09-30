@@ -36,7 +36,7 @@ const char* WIFI_SSID     = "your wifi name";
 const char* WIFI_PASSWORD = "your wifi pasword";
 
 #define API_KEY      "your firebse API key"
-#define DATABASE_URL "https://smart-intruder-alarm-default-rtdb.firebaseio.com"
+#define DATABASE_URL "your firebase URL"
 #define USER_EMAIL   "firebase email"
 #define USER_PASS    "firebase user password"
 

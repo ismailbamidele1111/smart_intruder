@@ -1,3 +1,6 @@
 # Credentials
 secrets.h
 firebase-config.js
+
+# Vercel build output
+dist/

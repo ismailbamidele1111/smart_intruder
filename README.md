@@ -154,5 +154,13 @@ are kept out of this repository. To run the project:
 
 Both `secrets.h` and `firebase-config.js` are listed in `.gitignore`.
 
+
+Deploying the dashboard to Vercel
+
+1. On vercel.com, Add New > Project and import this repo. `vercel.json` already sets the build (`node build.js`) and output folder (`dist`).
+2. Under Settings > Environment Variables, add `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_DATABASE_URL` and `FIREBASE_PROJECT_ID` (the same values as `firebase-config.js`).
+3. Deploy. `build.js` copies `Dashboard.html` to `dist/index.html` and generates `firebase-config.js` from those variables.
+4. In Firebase Console > Authentication > Settings > Authorized domains, add your `.vercel.app` domain so sign-in works.
+
 Author
 Ridwan Ismail and Shehu Uthman

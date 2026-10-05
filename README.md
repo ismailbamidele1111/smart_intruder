@@ -147,5 +147,12 @@ Sensitive information such as:
 4. Authentication tokens
 5. Private configuration files
 
+are kept out of this repository. To run the project:
+
+1. Copy `secrets.example.h` to `secrets.h` and fill in your WiFi, Firebase and ntfy values (used by `smart_intruder.ino`).
+2. Copy `firebase-config.example.js` to `firebase-config.js` and fill in your Firebase web config (used by `Dashboard.html`).
+
+Both `secrets.h` and `firebase-config.js` are listed in `.gitignore`.
+
 Author
 Ridwan Ismail and Shehu Uthman

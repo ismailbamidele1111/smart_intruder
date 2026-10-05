@@ -3,88 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Smart Intruder Alarm</title>
+<title>Home Guard</title>
 <style>
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, "Segoe UI", Arial, sans-serif;
-    background: #0b1120; color: #175ca1; margin: 0;
+    background: #0b1120; color: #f1f5f9; margin: 0;
     display: flex; justify-content: center; padding: 32px 16px; min-height: 100vh;
   }
-  .card { width: 100%; max-width: 420px; text-align: center; }
-  .top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #94a3b8; margin-bottom: 28px; }
+  .card { width: 100%; max-width: 420px; }
+  .top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
   .top b { color: #f1f5f9; font-size: 16px; }
   .conn { display: flex; align-items: center; gap: 6px; }
   .conn i { width: 8px; height: 8px; border-radius: 50%; background: #64748b; display: inline-block; }
   .conn.on i { background: #22c55e; }
 
-  .shield {
-    width: 170px; height: 170px; border-radius: 50%; margin: 0 auto 22px;
-    display: flex; align-items: center; justify-content: center; font-size: 78px;
-    background: #14532d; border: 4px solid #22c55e; transition: all .3s;
+  #authScreen { display: none; }
+  #authScreen h2 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  #authScreen p.sub { text-align: center; color: #94a3b8; font-size: 13.5px; margin-bottom: 24px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; color: #94a3b8; margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 13px 14px; border-radius: 10px; border: 1px solid #334155;
+    background: #131c31; color: #f1f5f9; font-size: 15px;
   }
-  .state-off .shield { background: #1e293b; border-color: #475569; filter: grayscale(1); }
-  .state-alert .shield { background: #7f1d1d; border-color: #ef4444; animation: pulse 1.1s infinite; }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.6);} 50% { box-shadow: 0 0 0 22px rgba(239,68,68,0);} }
-
-  h1 { font-size: 26px; margin: 0 0 8px; }
-  .state-ok h1 { color: #4ade80; }
-  .state-off h1 { color: #94a3b8; }
-  .state-alert h1 { color: #f87171; }
-  .msg { font-size: 15px; color: #cbd5e1; line-height: 1.5; margin: 0 auto 26px; max-width: 330px; }
-
-  button {
-    width: 100%; padding: 16px; border: 0; border-radius: 14px; font-size: 16px; font-weight: 600;
-    cursor: pointer; margin-bottom: 12px; color: #fff;
+  .field input:focus { outline: none; border-color: #3b82f6; }
+  #authError { color: #f87171; font-size: 13px; min-height: 18px; margin-bottom: 6px; text-align: center; }
+  .authBtn {
+    width: 100%; padding: 14px; border: 0; border-radius: 12px; font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-bottom: 12px; color: #fff; background: #2563eb;
   }
-  #toggleBtn { background: #2563eb; }
-  .state-off #toggleBtn { background: #16a34a; }
-  #clearBtn { background: #b91c1c; display: none; }
-  .state-alert #clearBtn { display: block; }
+  .switchMode { text-align: center; font-size: 13.5px; color: #94a3b8; }
+  .switchMode a { color: #60a5fa; cursor: pointer; text-decoration: underline; }
 
-  .help { margin-top: 26px; background: #131c31; border-radius: 14px; padding: 16px; text-align: left; font-size: 13.5px; color: #94a3b8; line-height: 1.6; }
-  .help b { color: #e2e8f0; }
+  #appScreen { display: none; }
+  .armedRow {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #131c31; border-radius: 12px; padding: 14px 16px; margin-bottom: 18px;
+  }
+  .armedRow span { font-size: 14.5px; }
+  .armedRow button {
+    border: 0; border-radius: 8px; padding: 9px 16px; font-size: 13.5px; font-weight: 600;
+    color: #fff; background: #2563eb; cursor: pointer;
+  }
+  .armedRow.off button { background: #16a34a; }
+  .armedRow .dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 8px; }
+  .armedRow.off .dot { background: #64748b; }
+
+  #feed { display: flex; flex-direction: column; gap: 10px; }
+  .feedItem {
+    background: #131c31; border-left: 3px solid #ef4444; border-radius: 8px;
+    padding: 12px 14px; font-size: 14.5px;
+  }
+  .feedItem .time { color: #94a3b8; font-size: 12.5px; margin-top: 2px; }
+  .empty { text-align: center; color: #64748b; font-size: 14px; padding: 30px 0; }
+
+  button.wide {
+    width: 100%; padding: 14px; border: 0; border-radius: 12px; font-size: 14.5px; font-weight: 600;
+    cursor: pointer; margin-top: 18px; color: #fff; background: #334155;
+  }
 </style>
 </head>
 <body>
 <div class="card" id="app">
-  <div class="top"><b>🏠 Home Guard</b><span class="conn" id="conn"><i></i><span id="connTxt">Connecting…</span></span></div>
 
-  <div class="shield" id="icon">🛡️</div>
-  <h1 id="title">Loading…</h1>
-  <p class="msg" id="msg">Checking on your property.</p>
+  <div class="top"><b>🏠 Home Guard</b><span class="conn" id="conn"><i></i><span id="connTxt">—</span></span></div>
 
-  <button id="toggleBtn">Turn protection OFF</button>
-  <button id="notifBtn" style="background:#334155">🔔 Enable alerts on this device</button>
-  <button id="clearBtn">I've checked. Mark as safe</button>
+  <div id="authScreen">
+    <h2 id="authTitle">Log in</h2>
+    <p class="sub" id="authSub">Access your Home Guard dashboard</p>
 
-  <div class="help">
-    <b>🟢 Protected:</b> the guard is on duty. If someone walks into a zone, the alarm rings and you're alerted here.<br>
-    <b>⚪ Protection off:</b> the guard is off duty. Use this when you're home, so you don't set it off yourself.<br>
-    <b>🔴 Intruder alert:</b> movement was caught while protection was on. Check your property, then tap "Mark as safe".
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="emailInput" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="passwordInput" placeholder="At least 6 characters">
+    </div>
+
+    <div id="authError"></div>
+
+    <button class="authBtn" id="authSubmitBtn">Log in</button>
+    <p class="switchMode" id="switchMode">Don't have an account? <a id="switchLink">Sign up</a></p>
   </div>
+
+  <div id="appScreen">
+    <div class="armedRow" id="armedRow">
+      <span><span class="dot"></span><span id="armedLabel">Protected</span></span>
+      <button id="toggleBtn">Turn off</button>
+    </div>
+
+    <div id="feed">
+      <div class="empty" id="emptyMsg">No alerts yet</div>
+    </div>
+
+    <button class="wide" id="notifBtn">🔔 Enable alerts on this device</button>
+    <button class="wide" id="logoutBtn">Log out</button>
+  </div>
+
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script>
-  const firebaseConfig = {
-    apiKey: "your firebase API key",
-    authDomain:  "Your auth domain",
-    databaseURL: your URL",
-    projectId: "your project ID",
-  };
-  const USER_EMAIL = "your firebase email";
-  const USER_PASSWORD = "Your password";
-
   firebase.initializeApp(firebaseConfig);
-
+  const auth = firebase.auth();
   const $ = (id) => document.getElementById(id);
-  let armed = true, alertActive = false, zone = "", alertSeenAt = "", lastTs = 0, seenMs = 0;
+
+  let mode = "login";
+
+  function setMode(newMode) {
+    mode = newMode;
+    $("authError").textContent = "";
+    if (mode === "login") {
+      $("authTitle").textContent = "Log in";
+      $("authSub").textContent = "Access your Home Guard dashboard";
+      $("authSubmitBtn").textContent = "Log in";
+      $("switchMode").innerHTML = 'Don\'t have an account? <a id="switchLink">Sign up</a>';
+    } else {
+      $("authTitle").textContent = "Sign up";
+      $("authSub").textContent = "Create an account for Home Guard";
+      $("authSubmitBtn").textContent = "Sign up";
+      $("switchMode").innerHTML = 'Already have an account? <a id="switchLink">Log in</a>';
+    }
+    document.getElementById("switchLink").onclick = () => setMode(mode === "login" ? "signup" : "login");
+  }
+  setMode("login");
+
+  $("authSubmitBtn").onclick = () => {
+    const email = $("emailInput").value.trim();
+    const pass = $("passwordInput").value;
+    $("authError").textContent = "";
+    if (!email || !pass) { $("authError").textContent = "Enter both email and password."; return; }
+    const action = mode === "login"
+      ? auth.signInWithEmailAndPassword(email, pass)
+      : auth.createUserWithEmailAndPassword(email, pass);
+    action.catch((err) => { $("authError").textContent = err.message; });
+  };
+
+  $("logoutBtn").onclick = () => auth.signOut();
+
+  let dbListenersAttached = false;
+  let historyCache = {};
+
   function ago(ms) {
-    const m = Math.floor((Date.now() - ms) / 60000);
-    if (m < 1) return "just now";
+    const s = Math.floor((Date.now() - ms) / 1000);
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
     if (m < 60) return m + (m === 1 ? " minute ago" : " minutes ago");
     const h = Math.floor(m / 60);
     if (h < 24) return h + (h === 1 ? " hour ago" : " hours ago");
@@ -92,59 +160,70 @@
     return d + (d === 1 ? " day ago" : " days ago");
   }
 
-  function render() {
-    const app = $("app");
-    app.classList.remove("state-ok", "state-off", "state-alert");
-    if (alertActive) {
-      app.classList.add("state-alert");
-      $("icon").textContent = "🚨";
-      $("title").textContent = "Intruder Alert!";
-      const when = lastTs > 1700000000 ? lastTs * 1000 : seenMs;
-      $("msg").textContent = "Intruder detected" + (when ? " " + ago(when) : "") + (zone ? " at " + zone : "") + ". Please check your property.";
-    } else if (armed) {
-      app.classList.add("state-ok");
-      $("icon").textContent = "🛡️";
-      $("title").textContent = "All Clear";
-      $("msg").textContent = "Protection is ON. The guard is on duty and nothing suspicious has been detected.";
-    } else {
-      app.classList.add("state-off");
-      $("icon").textContent = "🛡️";
-      $("title").textContent = "Protection is OFF";
-      $("msg").textContent = "The guard is off duty. Movement will NOT sound the alarm until you turn protection back on.";
+  function renderFeed() {
+    const feed = $("feed");
+    const entries = Object.entries(historyCache).sort((a, b) => b[0] - a[0]);
+    if (entries.length === 0) {
+      feed.innerHTML = '<div class="empty" id="emptyMsg">No alerts yet</div>';
+      return;
     }
-    $("toggleBtn").textContent = armed ? "Turn protection OFF" : "Turn protection ON";
+    feed.innerHTML = entries.slice(0, 20).map(([epoch, zoneName]) => {
+      const ms = Number(epoch) * 1000;
+      return '<div class="feedItem">Intruder detected' + (zoneName ? ' at ' + zoneName : '') +
+             '<div class="time">' + ago(ms) + '</div></div>';
+    }).join("");
   }
 
-  firebase.auth().signInWithEmailAndPassword(USER_EMAIL, USER_PASSWORD).then(() => {
+  function renderArmed(armed) {
+    const row = $("armedRow");
+    row.classList.toggle("off", !armed);
+    $("armedLabel").textContent = armed ? "Protected" : "Protection off";
+    $("toggleBtn").textContent = armed ? "Turn off" : "Turn on";
+  }
+
+  function attachDbListeners() {
+    if (dbListenersAttached) return;
+    dbListenersAttached = true;
     const db = firebase.database();
-    let firstLoad = true;
 
     db.ref(".info/connected").on("value", (s) => {
       $("conn").classList.toggle("on", s.val() === true);
       $("connTxt").textContent = s.val() === true ? "Online" : "Offline";
     });
-    db.ref("alarm/status").on("value", (s) => {
-      const v = (s.val() || "").toLowerCase();
-      const nowActive = v.includes("detected");
-      if (nowActive && !alertActive) {
-        seenMs = Date.now();
-        if (!firstLoad && "Notification" in window && Notification.permission === "granted") {
-          new Notification("Intruder detected!", { body: "Movement detected" + (zone ? " at " + zone : "") });
-        }
-      }
-      alertActive = nowActive;
-      firstLoad = false;
-      render();
-    });
-    db.ref("alarm/lastZone").on("value", (s) => { zone = s.val() || ""; render(); });
-    db.ref("alarm/lastTriggered").on("value", (s) => { lastTs = s.val() || 0; render(); });
-    setInterval(render, 30000);
-    $("notifBtn").onclick = () => { if ("Notification" in window) Notification.requestPermission().then((p) => { $("notifBtn").textContent = p === "granted" ? "🔔 Alerts enabled" : "Alerts blocked by browser"; }); };
-    db.ref("alarm/armed").on("value", (s) => { armed = s.val() !== false; render(); });
 
-    $("toggleBtn").onclick = () => db.ref("alarm/armed").set(!armed);
-    $("clearBtn").onclick = () => { db.ref("alarm/status").set("All clear"); };
-  }).catch((e) => { $("title").textContent = "Can't connect"; $("msg").textContent = e.message; });
+    let armedNow = true;
+    db.ref("alarm/armed").on("value", (s) => { armedNow = s.val() !== false; renderArmed(armedNow); });
+    $("toggleBtn").onclick = () => db.ref("alarm/armed").set(!armedNow);
+
+    db.ref("alarm/history").limitToLast(20).on("child_added", (s) => {
+      historyCache[s.key] = s.val();
+      renderFeed();
+      if ("Notification" in window && Notification.permission === "granted" && Date.now() - Number(s.key) * 1000 < 15000) {
+        new Notification("Intruder detected!", { body: s.val() ? "Intruder detected at " + s.val() : "Intruder detected" });
+      }
+    });
+
+    setInterval(renderFeed, 30000);
+
+    $("notifBtn").onclick = () => {
+      if ("Notification" in window) {
+        Notification.requestPermission().then((p) => {
+          $("notifBtn").textContent = p === "granted" ? "🔔 Alerts enabled" : "Alerts blocked by browser";
+        });
+      }
+    };
+  }
+
+  auth.onAuthStateChanged((user) => {
+    if (user) {
+      $("authScreen").style.display = "none";
+      $("appScreen").style.display = "block";
+      attachDbListeners();
+    } else {
+      $("appScreen").style.display = "none";
+      $("authScreen").style.display = "block";
+    }
+  });
 </script>
 </body>
 </html>

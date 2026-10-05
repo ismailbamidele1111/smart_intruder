@@ -1,20 +1,22 @@
 /*
   Intruder Alarm System - Dual Zone + LCD + Firebase + Phone Notifications
   ------------------------------------------------------------------------
-  NEW in this version:
-  - Real time from the internet (NTP), so the dashboard can say "5 minutes ago"
-  - Push notification to your phone via ntfy.sh when an intruder is detected
+  LOGIC: While a person IS present in a zone, nothing happens.
+  The moment a zone shows NO person (absence), the alarm fires immediately
+  (with a cooldown so it doesn't spam repeated alerts every loop cycle).
 
-  LIBRARIES: FirebaseClient (mobizt), LiquidCrystal I2C (Frank de Brabander)
+  LIBRARIES REQUIRED:
+  - FirebaseClient (by mobizt)
+  - LiquidCrystal I2C (by Frank de Brabander)
 
   PHONE NOTIFICATION SETUP:
   1. Install the free "ntfy" app on your phone (Android/iPhone)
-  2. Tap "+" and subscribe to the SAME topic name as NTFY_TOPIC below
+  2. Tap "+" and subscribe to the SAME topic name as NTFY_TOPIC in secrets.h
   3. Treat the topic name like a password: anyone who knows it can read
-     your alerts. Change it to something only you know (then subscribe to
-     the new name).
+     your alerts. Change it to something only you know.
 
-  FILL IN: WIFI_SSID and WIFI_PASSWORD
+  FILL IN BEFORE UPLOADING: copy secrets.example.h to secrets.h and set
+  WIFI_SSID, WIFI_PASSWORD, API_KEY, DATABASE_URL, USER_EMAIL, USER_PASS, NTFY_TOPIC
 */
 
 #define ENABLE_USER_AUTH
@@ -28,20 +30,12 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// Tell FirebaseClient which network client to use for 
+// Tell FirebaseClient which network client to use for TLS
 #define SSL_CLIENT WiFiClientSecure
 
 // ---------------- Configuration ----------------
-const char* WIFI_SSID     = "your wifi name";
-const char* WIFI_PASSWORD = "your wifi pasword";
-
-#define API_KEY      "your firebse API key"
-#define DATABASE_URL "your firebase URL"
-#define USER_EMAIL   "firebase email"
-#define USER_PASS    "firebase user password"
-
-// ntfy topic (subscribe to this exact name in the ntfy app)
-const char* NTFY_TOPIC = "smart-intruder-alarm- topic from the app ";
+// Credentials live in secrets.h (gitignored). Copy secrets.example.h to get started.
+#include "secrets.h"
 
 // Names shown on dashboard, LCD and notification
 const char* ZONE_A_NAME = "Zone A";
@@ -49,17 +43,17 @@ const char* ZONE_B_NAME = "Zone B";
 
 // Pins (placeholders, change to match your wiring)
 const int PIN_DECODER_VT = 14;
-const int PIN_DECODER_D0 = 32;
-const int PIN_DECODER_D1 = 33;
-const int PIN_BUZZER     = 23;
+const int PIN_DECODER_D0 = 25;
+const int PIN_DECODER_D1 = 27;
+const int PIN_BUZZER     = 26;
 #define PIN_LCD_SDA 21
 #define PIN_LCD_SCL 22
 
-#define LCD_ADDR 0x27
+#define LCD_ADDR 0x27   // some modules use 0x3F instead
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
-const unsigned long ALERT_COOLDOWN_MS  = 3000;
+const unsigned long ALERT_COOLDOWN_MS  = 60000;
 const unsigned long BUZZER_DURATION_MS = 15000;
 const unsigned long LCD_REFRESH_MS     = 1000;
 
@@ -67,6 +61,7 @@ const String PATH_ARMED     = "alarm/armed";
 const String PATH_STATUS    = "alarm/status";
 const String PATH_ZONE      = "alarm/lastZone";
 const String PATH_TRIGGERED = "alarm/lastTriggered";
+const String PATH_HISTORY   = "alarm/history";
 
 bool systemArmed = true;
 bool buzzerActive = false;
@@ -138,12 +133,13 @@ void sendPushNotification(const String &zoneName) {
     http.addHeader("Title", "Intruder detected!");
     http.addHeader("Priority", "urgent");
     http.addHeader("Tags", "rotating_light");
-    int code = http.POST("Movement detected at " + zoneName);
+    int code = http.POST("Intruder detected at " + zoneName);
     Serial.printf("Push notification sent, HTTP %d\n", code);
     http.end();
   }
 }
 
+// Called ONLY when a zone has NO person present, while armed.
 void triggerAlarm(const String &zoneName) {
   unsigned long now = millis();
   if (everTriggered && now - lastAlertTime < ALERT_COOLDOWN_MS) return;
@@ -157,11 +153,15 @@ void triggerAlarm(const String &zoneName) {
   updateLCD();
 
   time_t t = time(nullptr);
-  int epoch = (t > 1700000000) ? (int)t : 0;   // 0 = clock not available
+  int epoch = (t > 1700000000) ? (int)t : 0;
 
   Database.set<String>(aClient, PATH_STATUS, "Intruder detected!", processData, "setStatusTask");
   Database.set<String>(aClient, PATH_ZONE, zoneName, processData, "setZoneTask");
   Database.set<int>(aClient, PATH_TRIGGERED, epoch, processData, "setTimeTask");
+
+  if (epoch > 0) {
+    Database.set<String>(aClient, PATH_HISTORY + "/" + String(epoch), zoneName, processData, "setHistoryTask");
+  }
 
   sendPushNotification(zoneName);
 }
@@ -201,9 +201,15 @@ void setup() {
 void loop() {
   app.loop();
 
+  // VT HIGH = the decoder is receiving a valid, trustworthy signal right now.
+  // While that's true, each zone pin tells us directly whether a person is
+  // present (HIGH) or absent (LOW) in that zone, in real time.
+  //
+  // Person present -> pin HIGH -> do nothing, stay silent
+  // Person absent  -> pin LOW  -> triggerAlarm() fires "Intruder detected"
   if (app.ready() && systemArmed && digitalRead(PIN_DECODER_VT) == HIGH) {
-    if (digitalRead(PIN_DECODER_D0) == HIGH) triggerAlarm(ZONE_A_NAME);
-    else if (digitalRead(PIN_DECODER_D1) == HIGH) triggerAlarm(ZONE_B_NAME);
+    if (digitalRead(PIN_DECODER_D0) == LOW) triggerAlarm(ZONE_A_NAME);
+    if (digitalRead(PIN_DECODER_D1) == LOW) triggerAlarm(ZONE_B_NAME);
   }
 
   if (buzzerActive && millis() - buzzerStartTime >= BUZZER_DURATION_MS) {

@@ -41,11 +41,10 @@
 const char* ZONE_A_NAME = "Zone A";
 const char* ZONE_B_NAME = "Zone B";
 
-// Pins (placeholders, change to match your wiring)
-const int PIN_DECODER_VT = 14;
-const int PIN_DECODER_D0 = 25;
-const int PIN_DECODER_D1 = 27;
-const int PIN_BUZZER     = 26;
+// Pins (placeholders, change to match your wiring
+const int PIN_DECODER_D0 = 33;
+const int PIN_DECODER_D1 = 32;
+const int PIN_BUZZER     = 23;
 #define PIN_LCD_SDA 21
 #define PIN_LCD_SCL 22
 
